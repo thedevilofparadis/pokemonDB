@@ -1,0 +1,340 @@
+<html>
+<head>
+   <meta charset="UTF-8">
+   <title>Pokemon</title>
+   <style type="text/css">
+      /* Stile base del layout e delle sezioni */
+      body {
+         font-family: Arial, sans-serif;
+         margin: 0;
+         background-color: #f0f2f5;
+      }
+
+      /* Barra laterale fissa */
+      #barra {
+         position: fixed;
+         top: 0;
+         left: 0;
+         width: 160px;
+         height: 100vh;
+         background-color: #2c3e50;
+         padding-top: 20px;
+         box-shadow: 2px 0 5px rgba(0, 0, 0, 0.2);
+      }
+
+      .bottoneBarra {
+         width: 130px;
+         height: 40px;
+         margin: 10px 15px;
+         background-color: #3498db;
+         color: white;
+         border: none;
+         border-radius: 5px;
+         font-size: 16px;
+         cursor: pointer;
+         transition: background-color 0.2s ease;
+      }
+
+      .bottoneBarra:hover {
+         background-color: #2980b9;
+      }
+
+      .bottone {
+         margin-top: 15px;
+         padding: 10px 20px;
+         background-color: #27ae60;
+         color: white;
+         border: none;
+         border-radius: 5px;
+         font-size: 14px;
+         cursor: pointer;
+      }
+
+      .bottone:hover {
+         background-color: #1e8449;
+      }
+
+      /* Sezioni nascoste inizialmente */
+      #creazione, #novita, #duello {
+         visibility: hidden;
+         position: absolute;
+         left: 180px;
+         top: 20px;
+         padding: 20px;
+         background-color: white;
+         border-radius: 10px;
+         box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+         width: 600px;
+      }
+
+      #creazione input[type='text'],
+      #creazione input[type='number'] {
+         width: 100px;
+         padding: 6px;
+         margin: 5px 0 10px;
+         border: 1px solid #ccc;
+         border-radius: 5px;
+         font-size: 14px;
+      }
+
+      .oggetto {
+         margin: 10px 0;
+         padding: 10px;
+         border: 1px solid #ccc;
+         background-color: #ecf0f1;
+         border-radius: 6px;
+         font-weight: bold;
+      }
+
+      #scritta {
+         margin-top: 15px;
+         font-weight: bold;
+         color: #e74c3c;
+      }
+
+      #counter {
+         margin-top: 10px;
+         font-weight: bold;
+         color: #2c3e50;
+      }
+
+      .bottoniCombattimento {
+         visibility: hidden;
+         top: 500px;
+         height: 30px;
+         width: 150px;
+      }
+   </style>
+</head>
+<body>
+
+   <!-- Barra laterale -->
+   <div id="barra">
+      <input type="button" class="bottoneBarra" value="Crea" onclick="apriCreazione();">
+      <input type="button" class="bottoneBarra" value="Novità" onclick="apriNovita(webSocket);">
+      <input type="button" class="bottoneBarra" value="Duello" onclick="apriDuello(webSocket, idP);">
+   </div>
+
+   <!-- Sezione di creazione Pokémon -->
+   <div id="creazione">
+      <p>Scegli un nome per il tuo Pokémon e assegna le statistiche. Hai 120 punti da distribuire (min 1, max 99 per statistica). Puoi avere un solo Pokémon alla volta, se ne crei uno nuovo perderai quello vecchio!</p>
+      <label>Nome: <input type="text" id="nome"></label><br>
+      <label>Attacco: <input type="number" name="val" id="att"></label><br>
+      <label>Vita: <input type="number" name="val" id="vita"></label><br>
+      <label>Difesa: <input type="number" name="val" id="def"></label><br>
+      <span id="counter">120</span><br>
+      <input type="button" class="bottone" value="Crea" onclick="creaPokemon(webSocket);">
+      <div id="scritta"></div>
+   </div>
+
+   <!-- Sezione delle novità -->
+   <div id="novita">
+      <p><strong>Novità:</strong></p>
+   </div>
+   
+   <!-- Sezione per il duello -->
+   <div id="duello">
+      <p id="frase"></p>
+      <div id="pok1"></div>
+      <div id="pok2"></div>
+      <input type="button" style="left: 250px;" class="bottoniCombattimento" value="Attacco normale" onclick="attaccare(webSocket, false);">
+      <input type="button" style="left: 450px;" class="bottoniCombattimento" value="Attacco pesante" onclick="attaccare(webSocket, true);">
+   </div>
+
+   <script>
+      // Inizializzazione variabili
+      let totPunti = 120;
+      const inputIds = ['att', 'vita', 'def'];
+      const input = document.getElementsByName("val");
+      let idP = 0; // ID del Pokémon creato
+      let id; // ID del client
+      let tuoTurno = false;
+      for (let i = 0; i < input.length; i++) {
+         input[i].addEventListener('input', aggiornaContatore); // aggiorna i punti disponibili in tempo reale
+      }
+
+      // Inizializza WebSocket dinamicamente basandosi sull'host
+      const webSocket = new WebSocket(location.origin.replace(/^http/, 'ws'));
+      const scritta = document.getElementById('scritta');
+      let schermataAperta = null;
+
+      // Gestione dei messaggi WebSocket ricevuti dal server
+      webSocket.onmessage = (event) => {
+         const data = JSON.parse(event.data);
+
+         if (data.azione === "id") {
+            id = data.id; // salva ID assegnato dal server
+         }
+if (data.azione === "crea") {
+   // Messaggio di conferma quando il Pokémon viene creato correttamente
+   scritta.innerHTML = "Pokémon creato con successo";
+   idP = data.idP; // Salva l'ID del Pokémon appena creato
+}
+
+if (data.azione === "nomeDuplicato") {
+   // Messaggio di errore se il nome scelto è già in uso
+   scritta.innerHTML = "Il nome scelto è già utilizzato, scegline un altro.";
+}
+
+if (data.azione === "puntiInvalidi") {
+   // Messaggio di errore se i punti distribuiti sono eccessivi o non validi
+   scritta.innerHTML = "Hai usato troppi punti o inserito un valore non valido (ogni statistica deve essere tra 1 e 99).";
+}
+
+if (data.azione === "novita") {
+   // Visualizza i Pokémon esistenti solo se non sono già mostrati
+   let esistenti = document.getElementsByName('A');
+   if (esistenti.length === 0) {
+      const ogg = document.getElementById('novita');
+      for (let i = 0; i < data.lista.length; i++) {
+         const nuovo = document.createElement('div');
+         nuovo.setAttribute('name', 'A');
+         nuovo.setAttribute('class', 'oggetto');
+         ogg.appendChild(nuovo); // Aggiunge un div per ogni Pokémon
+      }
+   }
+
+   // Riempie i div creati con le informazioni dei Pokémon
+   let oggetti = document.getElementsByName('A');
+   for (let i = 0; i < data.lista.length; i++) {
+      oggetti[i].innerHTML = `Nome: ${data.lista[i].nomeP} - Vita: ${data.lista[i].hpP} - Attacco: ${data.lista[i].attP} - Difesa: ${data.lista[i].defP}`;
+   }
+}
+
+if (data.azione === "attendi") {
+   // L'utente è in attesa che un altro giocatore si unisca al duello
+   document.getElementById("frase").innerHTML = "In attesa che qualcun'altro abbia voglia di duellare.";
+   document.getElementById("pok1").innerHTML = "";
+   document.getElementById("pok2").innerHTML = "";
+}
+
+if (data.azione === "inizioDuello") {
+   // Inizio del duello: si stabilisce chi inizia e si mostrano i due Pokémon
+   let inizia;
+   if (data.primo == id) {
+      inizia = "Inizi te.";
+      document.getElementById("pok1").innerHTML = `Il tuo pokémon:<br>Nome: ${data.pokemonPrimo.nomeP} - Vita: ${data.pokemonPrimo.hpP} - Attacco: ${data.pokemonPrimo.attP} - Difesa: ${data.pokemonPrimo.defP}`;
+      document.getElementById("pok2").innerHTML = `Il suo pokémon:<br>Nome: ${data.pokemonSecondo.nomeP} - Vita: ${data.pokemonSecondo.hpP} - Attacco: ${data.pokemonSecondo.attP} - Difesa: ${data.pokemonSecondo.defP}`;
+       aggiornareTurno(); // visibilità bottoni se è il proprio turno
+            } else {
+               inizia = "Inizia l'avversario";
+               document.getElementById("pok1").innerHTML = `Il tuo pokémon:<br>Nome: ${data.pokemonSecondo.nomeP} - Vita: ${data.pokemonSecondo.hpP} - Attacco: ${data.pokemonSecondo.attP} - Difesa: ${data.pokemonSecondo.defP}`;
+               document.getElementById("pok2").innerHTML = `Il suo pokémon:<br>Nome: ${data.pokemonPrimo.nomeP} - Vita: ${data.pokemonPrimo.hpP} - Attacco: ${data.pokemonPrimo.attP} - Difesa: ${data.pokemonPrimo.defP}`;
+            }
+            document.getElementById("frase").innerHTML = inizia;
+         }
+
+         if (data.azione == "risultatoAttacco") {
+            let oggFrase = document.getElementById("frase");
+            if (data.vittoria) {
+               // Gestione fine partita
+               if (tuoTurno) {
+                  aggiornareTurno();
+                  alert("Hai vinto!");
+                  document.getElementById("pok2").innerHTML = "Il suo pokémon:<br>";
+               } else {
+                  alert("Hai perso!");
+                  document.getElementById("pok1").innerHTML = "Il tuo pokémon:<br>";
+               }
+               oggFrase.innerHTML = "Usa i bottoni laterali per navigare nel menu!";
+            } else {
+               if (data.schivato) {
+                  oggFrase.innerHTML = "Il pokemon ha schivato il colpo!";
+                  aggiornareTurno();
+               } else {
+                  // Aggiorna dati del pokémon colpito
+                  if (tuoTurno) {
+                     oggFrase.innerHTML = "Ora tocca all'avversario!";
+                     document.getElementById("pok2").innerHTML = `Il suo pokémon:<br>Nome: ${data.pokemonAttaccato.nomeP} - Vita: ${data.pokemonAttaccato.hpP} - Attacco: ${data.pokemonAttaccato.attP} - Difesa: ${data.pokemonAttaccato.defP}`;
+                  } else {
+                     oggFrase.innerHTML = "Ora tocca a te!";
+                     document.getElementById("pok1").innerHTML = `Il tuo pokémon:<br>Nome: ${data.pokemonAttaccato.nomeP} - Vita: ${data.pokemonAttaccato.hpP} - Attacco: ${data.pokemonAttaccato.attP} - Difesa: ${data.pokemonAttaccato.defP}`;
+                  }
+                  aggiornareTurno(); // passa il turno
+               }
+            }
+         }
+      };
+
+      // Apre la schermata di creazione nascondendo le altre
+      function apriCreazione() {
+         if (schermataAperta) {
+            document.getElementById(schermataAperta).style.visibility = "hidden";
+         }
+         document.getElementById('creazione').style.visibility = "visible";
+         schermataAperta = "creazione";
+      }
+
+      // Invia le statistiche al server per creare un Pokémon
+      function creaPokemon(ws) {
+         const stats = {
+            nome: document.getElementById('nome').value,
+            vita: parseInt(document.getElementById('vita').value),
+            attacco: parseInt(document.getElementById('att').value),
+            difesa: parseInt(document.getElementById('def').value)
+         };
+         const data = JSON.stringify({ azione: "crea", stats: stats });
+         ws.send(data);
+      }
+
+      // Calcola e mostra i punti rimanenti aggiornando dinamicamente il contatore
+      function aggiornaContatore() {
+         let somma = 0;
+         for (let id of inputIds) {
+            const val = parseInt(document.getElementById(id).value) || 0;
+            somma += val;
+         }
+         const puntiRestanti = totPunti - somma;
+         document.getElementById('counter').textContent = puntiRestanti;
+      }
+
+      // Richiede al server la lista delle novità e la mostra
+      function apriNovita(ws) {
+         if (schermataAperta) {
+            document.getElementById(schermataAperta).style.visibility = "hidden";
+         }
+         const data = JSON.stringify({ azione: "vediNovita" });
+         ws.send(data);
+         document.getElementById("novita").style.visibility = "visible";
+         schermataAperta = "novita";
+      }
+
+      // Invia richiesta di inizio duello se il Pokémon è stato creato
+      function apriDuello(ws, idP) {
+         if (idP != 0) {
+            if (schermataAperta) {
+               document.getElementById(schermataAperta).style.visibility = "hidden";
+            }
+            const data = JSON.stringify({ azione: "richiestaDuello", "idP": idP });
+            ws.send(data);
+            schermataAperta = "duello";
+            document.getElementById(schermataAperta).style.visibility = "visible";
+         } else {
+            alert("Devi prima creare un Pokémon!");
+         }
+      }
+
+      // Invia al server l'attacco (normale o pesante)
+      function attaccare(ws, attaccoPesante) {
+         const data = JSON.stringify({ azione: "attacco", "pesante": attaccoPesante });
+         ws.send(data);
+      }
+
+      // Gestisce il cambio turno e la visibilità dei bottoni di attacco
+      function aggiornareTurno() {
+         let bottoni = document.getElementsByClassName("bottoniCombattimento");
+         if (tuoTurno) {
+            tuoTurno = false;
+            for (let i = 0; i < bottoni.length; i++) {
+               bottoni[i].style.visibility = "hidden";
+            }
+         } else {
+            tuoTurno = true;
+            for (let i = 0; i < bottoni.length; i++) {
+               bottoni[i].style.visibility = "visible";
+            }
+         }
+      }
+   </script>
+</body>
+</html>
